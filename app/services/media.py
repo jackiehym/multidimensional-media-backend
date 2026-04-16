@@ -1,0 +1,216 @@
+from typing import List, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+from app.models import MediaItem, Tag
+from app.schemas import MediaCreate, MediaUpdate
+from app.utils.filename_parser import parse_filename, get_tag_category_for_name
+
+
+class MediaService:
+    @staticmethod
+    def get_media_items(db: Session, skip: int = 0, limit: int = 100):
+        media_items = db.query(MediaItem).offset(skip).limit(limit).all()
+        # Convert Tag objects to tag names
+        result = []
+        for item in media_items:
+            item_dict = {
+                "id": item.id,
+                "filename": item.filename,
+                "path": item.path,
+                "tags": [tag.name for tag in item.tags],
+                "year": item.year,
+                "resolution": item.resolution,
+                "rating": item.rating,
+                "added_at": item.added_at,
+                "updated_at": item.updated_at
+            }
+            result.append(item_dict)
+        return result
+
+    @staticmethod
+    def get_media_item(db: Session, media_id: int):
+        item = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        if not item:
+            return None
+        # Convert Tag objects to tag names
+        return {
+            "id": item.id,
+            "filename": item.filename,
+            "path": item.path,
+            "tags": [tag.name for tag in item.tags],
+            "year": item.year,
+            "resolution": item.resolution,
+            "rating": item.rating,
+            "added_at": item.added_at,
+            "updated_at": item.updated_at
+        }
+
+    @staticmethod
+    def create_media_item(db: Session, media: MediaCreate):
+        # Parse filename
+        parsed = parse_filename(media.filename)
+        
+        # Ensure tags exist
+        tag_objects = []
+        for tag_name in set([*media.tags, *parsed.tags]):
+            tag = db.query(Tag).filter(Tag.name == tag_name).first()
+            if not tag:
+                # Create new tag
+                category, color = get_tag_category_for_name(tag_name)
+                tag = Tag(
+                    name=tag_name,
+                    category=category,
+                    color=color
+                )
+                db.add(tag)
+                db.commit()
+                db.refresh(tag)
+            tag_objects.append(tag)
+        
+        # Create media item
+        db_media = MediaItem(
+            filename=media.filename,
+            path=media.path,
+            tags=tag_objects,
+            year=media.year or parsed.year,
+            resolution=media.resolution or parsed.resolution,
+            rating=media.rating
+        )
+        
+        db.add(db_media)
+        db.commit()
+        db.refresh(db_media)
+        
+        # Convert to dictionary with tag names
+        return {
+            "id": db_media.id,
+            "filename": db_media.filename,
+            "path": db_media.path,
+            "tags": [tag.name for tag in db_media.tags],
+            "year": db_media.year,
+            "resolution": db_media.resolution,
+            "rating": db_media.rating,
+            "added_at": db_media.added_at,
+            "updated_at": db_media.updated_at
+        }
+
+    @staticmethod
+    def bulk_create_media_items(db: Session, media_items: List[MediaCreate]) -> int:
+        created_count = 0
+        for media in media_items:
+            try:
+                MediaService.create_media_item(db, media)
+                created_count += 1
+            except IntegrityError:
+                db.rollback()
+                continue
+        return created_count
+
+    @staticmethod
+    def update_media_item(db: Session, media_id: int, media_update: MediaUpdate):
+        db_media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        if not db_media:
+            return None
+        
+        # Update basic fields
+        update_data = media_update.model_dump(exclude_unset=True)
+        
+        # Handle tags separately
+        if 'tags' in update_data:
+            tag_objects = []
+            for tag_name in update_data.pop('tags'):
+                tag = db.query(Tag).filter(Tag.name == tag_name).first()
+                if not tag:
+                    category, color = get_tag_category_for_name(tag_name)
+                    tag = Tag(
+                        name=tag_name,
+                        category=category,
+                        color=color
+                    )
+                    db.add(tag)
+                    db.commit()
+                    db.refresh(tag)
+                tag_objects.append(tag)
+            db_media.tags = tag_objects
+        
+        # Update other fields
+        for field, value in update_data.items():
+            setattr(db_media, field, value)
+        
+        db.commit()
+        db.refresh(db_media)
+        
+        # Convert to dictionary with tag names
+        return {
+            "id": db_media.id,
+            "filename": db_media.filename,
+            "path": db_media.path,
+            "tags": [tag.name for tag in db_media.tags],
+            "year": db_media.year,
+            "resolution": db_media.resolution,
+            "rating": db_media.rating,
+            "added_at": db_media.added_at,
+            "updated_at": db_media.updated_at
+        }
+
+    @staticmethod
+    def delete_media_item(db: Session, media_id: int) -> bool:
+        db_media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        if not db_media:
+            return False
+        
+        db.delete(db_media)
+        db.commit()
+        return True
+
+    @staticmethod
+    def bulk_delete_media_items(db: Session, media_ids: List[int]) -> int:
+        deleted_count = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).delete(synchronize_session=False)
+        db.commit()
+        return deleted_count
+
+    @staticmethod
+    def add_tag_to_items(db: Session, media_ids: List[int], tag_name: str, category: Optional[str] = None) -> bool:
+        # Ensure tag exists
+        tag = db.query(Tag).filter(Tag.name == tag_name).first()
+        if not tag:
+            if not category:
+                category, color = get_tag_category_for_name(tag_name)
+            else:
+                from app.models import TagCategory
+                cat = db.query(TagCategory).filter(TagCategory.key == category).first()
+                color = cat.color if cat else '270 60% 55%'
+            
+            tag = Tag(
+                name=tag_name,
+                category=category,
+                color=color
+            )
+            db.add(tag)
+            db.flush()  # 刷新以获取ID，但不提交事务
+        
+        # Add tag to media items
+        media_items = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).all()
+        for media in media_items:
+            # 检查标签是否已存在（使用标签名称进行比较）
+            tag_exists = any(t.name == tag_name for t in media.tags)
+            if not tag_exists:
+                media.tags.append(tag)
+        
+        return True
+
+    @staticmethod
+    def remove_tag_from_items(db: Session, media_ids: List[int], tag_name: str) -> bool:
+        tag = db.query(Tag).filter(Tag.name == tag_name).first()
+        if not tag:
+            return False
+        
+        media_items = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).all()
+        for media in media_items:
+            # 使用标签名称进行比较，而不是对象引用
+            tag_to_remove = next((t for t in media.tags if t.name == tag_name), None)
+            if tag_to_remove:
+                media.tags.remove(tag_to_remove)
+        
+        return True

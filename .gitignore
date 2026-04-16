@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+
+# Media files
+/media/
+/uploads/
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
