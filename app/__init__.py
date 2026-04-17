@@ -1,10 +1,23 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import os
 
 from app.api import media, tags, categories
 from app.db.session import init_db
 from app.config import settings
+
+
+def ensure_directories():
+    """确保必要的目录存在"""
+    os.makedirs(settings.MEDIA_DIR, exist_ok=True)
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    print(f"✓ 媒体目录：{settings.MEDIA_DIR}")
+    print(f"✓ 上传目录：{settings.UPLOAD_DIR}")
+
+
+# 确保必要的目录存在
+ensure_directories()
 
 # 初始化数据库
 init_db()

@@ -37,14 +37,6 @@ def get_media_item(
     return media_item
 
 
-@router.post("", response_model=MediaResponse)
-def create_media_item(
-    media: MediaCreate,
-    db: Session = Depends(get_db)
-):
-    return MediaService.create_media_item(db=db, media=media)
-
-
 @router.post("/bulk", response_model=BulkOperationResponse)
 def bulk_create_media_items(
     bulk_media: BulkMediaCreate,
@@ -131,14 +123,27 @@ class OpenFileRequest(BaseModel):
 @router.post("/open-file")
 def open_file(request: OpenFileRequest):
     """打开本地文件"""
-    if not os.path.exists(request.path):
+    # 处理上传的文件路径
+    file_path = request.path
+    if file_path.startswith('/media/'):
+        # 对于上传的文件，使用 StorageService 获取完整路径
+        filename = file_path.split('/')[-1]
+        full_path = StorageService.get_file_path(filename)
+        if not full_path:
+            raise HTTPException(status_code=404, detail="文件不存在")
+        file_path = full_path
+    elif not os.path.isabs(file_path):
+        # 对于相对路径，使用绝对路径
+        file_path = os.path.abspath(file_path)
+    
+    if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
     
     try:
         if os.name == 'nt':  # Windows
-            os.startfile(request.path)
+            os.startfile(file_path)
         else:  # macOS/Linux
-            subprocess.call(['open', request.path])
+            subprocess.call(['open', file_path])
         return {"success": True, "message": "已尝试打开文件"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -147,19 +152,32 @@ def open_file(request: OpenFileRequest):
 @router.post("/open-location")
 def open_location(request: OpenFileRequest):
     """打开文件所在位置"""
-    if not os.path.exists(request.path):
+    # 处理上传的文件路径
+    file_path = request.path
+    if file_path.startswith('/media/'):
+        # 对于上传的文件，使用 StorageService 获取完整路径
+        filename = file_path.split('/')[-1]
+        full_path = StorageService.get_file_path(filename)
+        if not full_path:
+            raise HTTPException(status_code=404, detail="文件不存在")
+        file_path = full_path
+    elif not os.path.isabs(file_path):
+        # 对于相对路径，使用绝对路径
+        file_path = os.path.abspath(file_path)
+    
+    if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
-    print(request.path)
+    print(file_path)
     try:
         if os.name == 'nt':  # Windows
             # 使用 explorer /select 打开文件夹并选中文件
-            path = request.path.replace("/", "\\")
+            path = file_path.replace("/", "\\")
             subprocess.Popen(f'explorer /select,"{path}"')
         elif os.name == 'posix':  # macOS
-            subprocess.call(['open', '-R', request.path])
+            subprocess.call(['open', '-R', file_path])
         else:  # Linux
             # 打开文件所在目录
-            parent_dir = os.path.dirname(request.path)
+            parent_dir = os.path.dirname(file_path)
             subprocess.call(['xdg-open', parent_dir])
         return {"success": True, "message": "已打开文件位置"}
     except Exception as e:

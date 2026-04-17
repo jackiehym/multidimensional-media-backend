@@ -21,7 +21,7 @@ env/
 # Environment variables
 .env
 
-# Media files
+# Media files (在 backend 根目录下)
 /media/
 /uploads/
 
@@ -43,3 +43,4 @@ build/
 # OS files
 .DS_Store
 Thumbs.db
+media/

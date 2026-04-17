@@ -8,10 +8,20 @@ from app.config import settings
 
 class StorageService:
     @staticmethod
+    def get_absolute_media_dir() -> str:
+        """获取媒体目录的绝对路径"""
+        # 确保使用绝对路径
+        if not os.path.isabs(settings.MEDIA_DIR):
+            # 获取当前文件的目录，然后向上两级到backend目录
+            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            return os.path.join(current_dir, settings.MEDIA_DIR)
+        return settings.MEDIA_DIR
+
+    @staticmethod
     def ensure_directories() -> None:
         """确保存储目录存在"""
-        os.makedirs(settings.MEDIA_DIR, exist_ok=True)
-        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        media_dir = StorageService.get_absolute_media_dir()
+        os.makedirs(media_dir, exist_ok=True)
 
     @staticmethod
     def save_uploaded_file(file, filename: str) -> Tuple[str, str]:
@@ -19,23 +29,41 @@ class StorageService:
         
         Args:
             file: 上传的文件对象
-            filename: 文件名
+            filename: 文件名（可能包含路径，如 "folder/subfolder/file.mp4"）
             
         Returns:
             Tuple[str, str]: (文件路径, 文件名)
         """
         StorageService.ensure_directories()
         
-        # 生成唯一文件名
+        # 提取纯文件名，去掉路径（处理文件夹上传的情况）
+        # 例如："Movies/2023/film.mp4" -> "film.mp4"
+        # 例如："Movies\\2023\\film.mp4" -> "film.mp4"
+        pure_filename = Path(filename).name
+        
+        # 生成唯一文件名，保留原始文件名的主体部分
         import uuid
         unique_id = str(uuid.uuid4())
-        ext = os.path.splitext(filename)[1]
-        unique_filename = f"{unique_id}{ext}"
+        name, ext = os.path.splitext(pure_filename)
+        # 构建新文件名：原始文件名 + _ + UUID + 扩展名
+        unique_filename = f"{name}_{unique_id[:8]}{ext}"
         
         # 保存文件
-        file_path = os.path.join(settings.MEDIA_DIR, unique_filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        media_dir = StorageService.get_absolute_media_dir()
+        file_path = os.path.join(media_dir, unique_filename)
+        
+        try:
+            # 尝试使用 shutil 复制文件对象
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        except Exception as e:
+            # 尝试另一种方式，直接读取文件内容
+            try:
+                content = file.file.read()
+                with open(file_path, "wb") as buffer:
+                    buffer.write(content)
+            except Exception as e2:
+                raise Exception(f"文件保存失败: {str(e2)}")
         
         # 返回相对路径和文件名
         relative_path = f"/media/{unique_filename}"
@@ -54,7 +82,8 @@ class StorageService:
         try:
             # 提取文件名
             filename = os.path.basename(file_path)
-            full_path = os.path.join(settings.MEDIA_DIR, filename)
+            media_dir = StorageService.get_absolute_media_dir()
+            full_path = os.path.join(media_dir, filename)
             
             if os.path.exists(full_path):
                 os.remove(full_path)
@@ -73,7 +102,8 @@ class StorageService:
         Returns:
             Optional[str]: 文件的完整路径
         """
-        full_path = os.path.join(settings.MEDIA_DIR, filename)
+        media_dir = StorageService.get_absolute_media_dir()
+        full_path = os.path.join(media_dir, filename)
         if os.path.exists(full_path):
             return full_path
         return None
