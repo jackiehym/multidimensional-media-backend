@@ -16,7 +16,8 @@ class MediaItem(Base):
     __tablename__ = "media_items"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    filename = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=False)  # 存储文件名（UUID）
+    display_name = Column(String(255), nullable=True)  # 显示文件名（原始文件名）
     path = Column(String(512), nullable=False)
     year = Column(Integer, nullable=True)
     resolution = Column(String(50), nullable=True)

@@ -83,12 +83,29 @@ async def upload_file(
     file: UploadFile = File(...)
 ):
     try:
-        path, filename = StorageService.save_uploaded_file(file, file.filename)
+        path, storage_filename, display_filename = StorageService.save_uploaded_file(file, file.filename)
         return {
             "path": path,
-            "filename": filename,
+            "filename": storage_filename,      # 存储文件名（带 UUID）
+            "display_filename": display_filename,  # 显示文件名（原始文件名）
             "size": file.size
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/delete-file")
+def delete_file(
+    filename: str = Body(..., embed=True)
+):
+    """删除未使用的上传文件"""
+    try:
+        success = StorageService.delete_file(filename)
+        if not success:
+            raise HTTPException(status_code=404, detail="文件不存在")
+        return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

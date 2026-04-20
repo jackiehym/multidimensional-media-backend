@@ -4,7 +4,8 @@ from datetime import datetime
 
 
 class MediaBase(BaseModel):
-    filename: str
+    filename: str  # 存储文件名（UUID）
+    display_name: Optional[str] = None  # 显示文件名（原始文件名）
     path: str
     tags: List[str] = []
     year: Optional[int] = None

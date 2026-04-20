@@ -4,7 +4,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models import Tag, MediaItem
 from app.schemas import TagCreate, TagUpdate
-from app.utils.filename_parser import get_tag_category_for_name
 
 
 class TagService:
@@ -134,7 +133,10 @@ class TagService:
         target_tag = db.query(Tag).filter(Tag.name == target_name).first()
         if not target_tag:
             # Create target tag if it doesn't exist
-            category, color = get_tag_category_for_name(target_name)
+            from app.models import TagCategory
+            cat = db.query(TagCategory).filter(TagCategory.key == 'custom').first()
+            category = 'custom'
+            color = cat.color if cat else '270 60% 55%'
             target_tag = Tag(
                 name=target_name,
                 category=category,
