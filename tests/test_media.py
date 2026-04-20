@@ -236,3 +236,91 @@ def test_update_display_name_duplicate(client):
     response = client.put(f"/api/media/{id2}", json=update_data)
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
+
+
+def test_delete_media_item_with_tags(client, db):
+    """测试删除带标签的媒体项时，media_tags 关联也被删除"""
+    from app.models import media_tags
+    
+    # 创建一个带标签的媒体文件
+    media_data = {
+        "filename": "tagtest.mp4",
+        "path": "/media/tagtest.mp4",
+        "display_name": "Tag Test.mp4",
+        "tags": ["action", "sci-fi"]
+    }
+    response = client.post("/api/media", json=media_data)
+    media_id = response.json()["id"]
+    
+    # 验证 media_tags 表中有记录
+    from sqlalchemy import select
+    count_before = db.execute(
+        select(media_tags).where(media_tags.c.media_id == media_id)
+    ).rowcount
+    
+    # 删除媒体项
+    response = client.delete(f"/api/media/{media_id}")
+    assert response.status_code == 200
+    assert response.json()["success"] == True
+    
+    # 验证 media_tags 表中该媒体项的记录已被删除
+    count_after = db.execute(
+        select(media_tags).where(media_tags.c.media_id == media_id)
+    ).rowcount
+    assert count_after == 0
+    
+    # 验证媒体项本身也被删除
+    response = client.get(f"/api/media/{media_id}")
+    assert response.status_code == 404
+
+
+def test_bulk_delete_media_items_with_tags(client, db):
+    """测试批量删除带标签的媒体项时，media_tags 关联也被删除"""
+    from app.models import media_tags
+    from sqlalchemy import select
+    
+    # 创建两个带标签的媒体文件
+    media1_data = {
+        "filename": "bulk1.mp4",
+        "path": "/media/bulk1.mp4",
+        "display_name": "Bulk Test 1.mp4",
+        "tags": ["action"]
+    }
+    response1 = client.post("/api/media", json=media1_data)
+    id1 = response1.json()["id"]
+    
+    media2_data = {
+        "filename": "bulk2.mp4",
+        "path": "/media/bulk2.mp4",
+        "display_name": "Bulk Test 2.mp4",
+        "tags": ["drama"]
+    }
+    response2 = client.post("/api/media", json=media2_data)
+    id2 = response2.json()["id"]
+    
+    # 验证 media_tags 表中有记录
+    count_before = db.execute(
+        select(media_tags).where(media_tags.c.media_id.in_([id1, id2]))
+    ).rowcount
+    assert count_before == 2  # 每个媒体项有一个标签
+    
+    # 批量删除
+    bulk_delete_data = {
+        "ids": [id1, id2]
+    }
+    response = client.post("/api/media/bulk-delete", json=bulk_delete_data)
+    assert response.status_code == 200
+    assert response.json()["success"] == True
+    assert response.json()["count"] == 2
+    
+    # 验证 media_tags 表中这两个媒体项的记录已被删除
+    count_after = db.execute(
+        select(media_tags).where(media_tags.c.media_id.in_([id1, id2]))
+    ).rowcount
+    assert count_after == 0
+    
+    # 验证媒体项本身也被删除
+    response1 = client.get(f"/api/media/{id1}")
+    assert response1.status_code == 404
+    response2 = client.get(f"/api/media/{id2}")
+    assert response2.status_code == 404

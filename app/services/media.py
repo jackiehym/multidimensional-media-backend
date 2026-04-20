@@ -2,7 +2,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.models import MediaItem, Tag
+from app.models import MediaItem, Tag, media_tags
 from app.schemas import MediaCreate, MediaUpdate
 
 
@@ -198,6 +198,10 @@ class MediaService:
             # 文件删除失败不影响数据库删除
             pass
         
+        # 先删除 media_tags 关联表中的记录
+        db.query(media_tags).filter(media_tags.c.media_id == media_id).delete()
+        
+        # 再删除媒体记录
         db.delete(db_media)
         db.commit()
         return True
@@ -218,7 +222,10 @@ class MediaService:
             # 文件删除失败不影响数据库删除
             pass
         
-        # 删除数据库记录
+        # 先删除 media_tags 关联表中的记录
+        db.query(media_tags).filter(media_tags.c.media_id.in_(media_ids)).delete(synchronize_session=False)
+        
+        # 再删除数据库记录
         deleted_count = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).delete(synchronize_session=False)
         db.commit()
         return deleted_count
