@@ -181,12 +181,37 @@ class MediaService:
         if not db_media:
             return False
         
+        # 提取文件名并删除物理文件
+        try:
+            from app.services.storage import StorageService
+            # 从 path 中提取文件名（如 "/media/123.mp4" -> "123.mp4"）
+            filename = db_media.path.split('/')[-1]
+            StorageService.delete_file(filename)
+        except Exception:
+            # 文件删除失败不影响数据库删除
+            pass
+        
         db.delete(db_media)
         db.commit()
         return True
 
     @staticmethod
     def bulk_delete_media_items(db: Session, media_ids: List[int]) -> int:
+        # 先获取所有要删除的媒体项
+        media_items = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).all()
+        
+        # 遍历删除物理文件
+        try:
+            from app.services.storage import StorageService
+            for media in media_items:
+                # 从 path 中提取文件名
+                filename = media.path.split('/')[-1]
+                StorageService.delete_file(filename)
+        except Exception:
+            # 文件删除失败不影响数据库删除
+            pass
+        
+        # 删除数据库记录
         deleted_count = db.query(MediaItem).filter(MediaItem.id.in_(media_ids)).delete(synchronize_session=False)
         db.commit()
         return deleted_count
