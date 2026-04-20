@@ -52,10 +52,13 @@ def update_media_item(
     media_update: MediaUpdate,
     db: Session = Depends(get_db)
 ):
-    media_item = MediaService.update_media_item(db=db, media_id=media_id, media_update=media_update)
-    if media_item is None:
-        raise HTTPException(status_code=404, detail="Media item not found")
-    return media_item
+    try:
+        media_item = MediaService.update_media_item(db=db, media_id=media_id, media_update=media_update)
+        if media_item is None:
+            raise HTTPException(status_code=404, detail="Media item not found")
+        return media_item
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{media_id}")

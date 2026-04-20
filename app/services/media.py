@@ -131,10 +131,18 @@ class MediaService:
         if not db_media:
             return None
         
-        # Update basic fields
         update_data = media_update.model_dump(exclude_unset=True)
         
-        # Handle tags separately
+        if 'display_name' in update_data:
+            new_display_name = update_data['display_name']
+            if new_display_name is not None:
+                existing = db.query(MediaItem).filter(
+                    MediaItem.display_name == new_display_name,
+                    MediaItem.id != media_id
+                ).first()
+                if existing:
+                    raise ValueError(f"Display name '{new_display_name}' already exists")
+        
         if 'tags' in update_data:
             tag_objects = []
             for tag_name in update_data.pop('tags'):
@@ -155,17 +163,16 @@ class MediaService:
                 tag_objects.append(tag)
             db_media.tags = tag_objects
         
-        # Update other fields
         for field, value in update_data.items():
             setattr(db_media, field, value)
         
         db.commit()
         db.refresh(db_media)
         
-        # Convert to dictionary with tag names
         return {
             "id": db_media.id,
             "filename": db_media.filename,
+            "display_name": db_media.display_name,
             "path": db_media.path,
             "tags": [tag.name for tag in db_media.tags],
             "year": db_media.year,

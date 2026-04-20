@@ -19,6 +19,7 @@ class MediaCreate(MediaBase):
 
 class MediaUpdate(BaseModel):
     filename: Optional[str] = None
+    display_name: Optional[str] = None
     tags: Optional[List[str]] = None
     year: Optional[int] = None
     resolution: Optional[str] = None

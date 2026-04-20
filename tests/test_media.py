@@ -184,3 +184,55 @@ def test_remove_tag_from_items(client):
     response = client.post("/api/media/remove-tag", json=remove_tag_data)
     assert response.status_code == 200
     assert response.json()["success"] == True
+
+
+def test_update_display_name(client):
+    """测试更新 display_name"""
+    # 先创建一个媒体文件
+    media_data = {
+        "filename": "test.mp4",
+        "path": "/media/test.mp4",
+        "display_name": "Original Name.mp4",
+        "tags": []
+    }
+    response = client.post("/api/media", json=media_data)
+    media_id = response.json()["id"]
+    
+    # 更新 display_name
+    update_data = {
+        "display_name": "New Name.mp4"
+    }
+    response = client.put(f"/api/media/{media_id}", json=update_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["display_name"] == "New Name.mp4"
+
+
+def test_update_display_name_duplicate(client):
+    """测试更新 display_name 时禁止重复"""
+    # 创建两个媒体文件
+    media1_data = {
+        "filename": "test1.mp4",
+        "path": "/media/test1.mp4",
+        "display_name": "Name1.mp4",
+        "tags": []
+    }
+    response1 = client.post("/api/media", json=media1_data)
+    id1 = response1.json()["id"]
+    
+    media2_data = {
+        "filename": "test2.mp4",
+        "path": "/media/test2.mp4",
+        "display_name": "Name2.mp4",
+        "tags": []
+    }
+    response2 = client.post("/api/media", json=media2_data)
+    id2 = response2.json()["id"]
+    
+    # 尝试将 media2 的 display_name 更新为已存在的 Name1.mp4
+    update_data = {
+        "display_name": "Name1.mp4"
+    }
+    response = client.put(f"/api/media/{id2}", json=update_data)
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
